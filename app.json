@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Autoescola Jardim Botânico",
+    "slug": "autoescola-jardim-botanico",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/simbolo-jardim-botanico.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/simbolo-jardim-botanico.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#33471d"
+    },
+    "ios": {
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.autoescolajardimbotanico.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "versionCode": 3,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/simbolo-jardim-botanico.png",
+        "backgroundColor": "#33471d"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.autoescolajardimbotanico.app"
+    },
+    "web": {
+      "favicon": "./assets/simbolo-jardim-botanico.png"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2711df02-b0a3-4cb7-8fa7-726db4132b32"
+      }
+    }
+  }
+}
