@@ -7,9 +7,10 @@ import {
   collection,
   doc,
   onSnapshot,
+  query,
   serverTimestamp,
   setDoc,
-  updateDoc,
+  where,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { emailAutenticacaoAlunoPorCPF, formatarCPF, normalizarCPF } from "../utils/cpf";
@@ -28,6 +29,8 @@ export async function cadastrarAlunoComCPF({
   nome,
   cpf,
   telefone,
+  email,
+  tipoFormacao,
   senha,
 }) {
   const cpfNumeros = normalizarCPF(cpf);
@@ -38,15 +41,31 @@ export async function cadastrarAlunoComCPF({
   );
 
   await setDoc(doc(db, "alunos", credenciais.user.uid), {
+    uid: credenciais.user.uid,
     nome,
     cpf: formatarCPF(cpfNumeros),
     cpfNumeros,
     telefone,
+    email: email?.trim().toLowerCase() || "",
+    tipoFormacao,
+    modeloSaldos: "separado",
+    saldoCarro: 0,
+    saldoMoto: 0,
+    totalAulasCarroCompradas: 0,
+    totalAulasMotoCompradas: 0,
+    aulasCarroUtilizadas: 0,
+    aulasMotoUtilizadas: 0,
     saldoAulas: 0,
     totalAulasCompradas: 0,
     aulasUtilizadas: 0,
+    aguardaLiberacaoCreditos: true,
+    provaPraticaStatus: "nenhuma",
     ativo: true,
+    consentiuPoliticaPrivacidade: true,
+    politicaPrivacidadeVersao: "2026-09-15",
+    politicaPrivacidadeAceitaEm: serverTimestamp(),
     criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
     emailAuth: emailAutenticacaoAlunoPorCPF(cpfNumeros),
   });
 
@@ -67,38 +86,24 @@ export function observarPerfilAluno(uid, callback) {
   });
 }
 
-export function observarAgendamentosAluno({ uid, cpf }, callback) {
-  const cpfNumeros = normalizarCPF(cpf || "");
+export function observarAgendamentosAluno({ uid }, callback) {
+  const consulta = query(
+    collection(db, "agendamentos"),
+    where("alunoId", "==", uid)
+  );
 
-  return onSnapshot(collection(db, "agendamentos"), (snapshot) => {
+  return onSnapshot(consulta, (snapshot) => {
     const agendamentos = snapshot.docs
       .map((item) => ({
         id: item.id,
         ...item.data(),
       }))
-      .filter((agendamento) => {
-        if (agendamento.tipo === "bloqueio") return false;
-
-        if (uid && agendamento.alunoId === uid) return true;
-
-        return (
-          cpfNumeros &&
-          normalizarCPF(agendamento.cpfAluno || "") === cpfNumeros
-        );
-      })
       .sort((a, b) => {
         if (a.dia !== b.dia) return a.dia.localeCompare(b.dia);
         return (a.horario || "").localeCompare(b.horario || "");
       });
 
     callback(agendamentos);
-  });
-}
-
-export async function solicitarProvaPratica(uid) {
-  return updateDoc(doc(db, "alunos", uid), {
-    provaPraticaStatus: "solicitada",
-    provaPraticaSolicitadaEm: serverTimestamp(),
   });
 }
 

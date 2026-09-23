@@ -10,19 +10,18 @@ import {
   observarAgendamentosAluno,
   observarPerfilAluno,
   sairAluno,
-  solicitarProvaPratica,
 } from "./src/services/alunoAuth";
 import {
   confirmarAgendamentoAlunoMobile,
-  observarAgendamentosSistema,
   observarDisponibilidadesInstrutores,
+  observarReservasHorarios,
 } from "./src/services/agendamentoAluno";
 
 export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [perfilAluno, setPerfilAluno] = useState(null);
   const [agendamentosAluno, setAgendamentosAluno] = useState([]);
-  const [agendamentosSistema, setAgendamentosSistema] = useState([]);
+  const [reservasHorarios, setReservasHorarios] = useState([]);
   const [disponibilidadesInstrutores, setDisponibilidadesInstrutores] = useState([]);
   const [carregandoSessao, setCarregandoSessao] = useState(true);
   const [carregandoPerfil, setCarregandoPerfil] = useState(false);
@@ -62,7 +61,6 @@ export default function App() {
         unsubscribeAgendamentos = observarAgendamentosAluno(
           {
             uid: user.uid,
-            cpf: perfil.cpfNumeros || perfil.cpf || "",
           },
           (agendamentos) => {
             setAgendamentosAluno(agendamentos);
@@ -81,18 +79,18 @@ export default function App() {
 
   useEffect(() => {
     if (!authUser) {
-      setAgendamentosSistema([]);
+      setReservasHorarios([]);
       setDisponibilidadesInstrutores([]);
       return undefined;
     }
 
-    const unsubscribeAgendamentos = observarAgendamentosSistema(setAgendamentosSistema);
+    const unsubscribeReservas = observarReservasHorarios(setReservasHorarios);
     const unsubscribeDisponibilidades = observarDisponibilidadesInstrutores(
       setDisponibilidadesInstrutores
     );
 
     return () => {
-      unsubscribeAgendamentos();
+      unsubscribeReservas();
       unsubscribeDisponibilidades();
     };
   }, [authUser]);
@@ -115,11 +113,10 @@ export default function App() {
             perfilAluno={perfilAluno}
             carregandoPerfil={carregandoPerfil}
             agendamentosAluno={agendamentosAluno}
-            agendamentosSistema={agendamentosSistema}
+            reservasHorarios={reservasHorarios}
             disponibilidadesInstrutores={disponibilidadesInstrutores}
             carregandoAgendamentos={carregandoAgendamentos}
             onConfirmarAgendamento={confirmarAgendamentoAlunoMobile}
-            onSolicitarProvaPratica={solicitarProvaPratica}
             onLogout={sairAluno}
           />
         ) : (

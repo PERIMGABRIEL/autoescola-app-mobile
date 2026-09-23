@@ -71,16 +71,45 @@ function obterPrimeiraDataUtil() {
   return data;
 }
 
+function formacaoPermiteCategoria(tipoFormacao, categoria) {
+  if (!tipoFormacao || tipoFormacao === "Carro e moto") return true;
+  if (tipoFormacao === "Apenas carro") return categoria === "CARRO";
+  return categoria === "MOTO";
+}
+
+function alunoUsaSaldosSeparados(aluno) {
+  return aluno?.modeloSaldos === "separado";
+}
+
+function saldoDisponivelDoAluno(aluno, categoria) {
+  if (!alunoUsaSaldosSeparados(aluno)) {
+    return Number(aluno?.saldoAulas || 0);
+  }
+
+  return categoria === "CARRO"
+    ? Number(aluno?.saldoCarro || 0)
+    : Number(aluno?.saldoMoto || 0);
+}
+
+function aulasConsumidasNoAgendamento(aluno, categoria) {
+  if (alunoUsaSaldosSeparados(aluno)) return 1;
+  return categoria === "CARRO" ? 2 : 1;
+}
+
+function nomeExibicaoInstrutor(nome) {
+  return instrutores.find((instrutor) => instrutor.nome === nome)
+    ?.rotuloExibicao || nome || "Instrutor";
+}
+
 export default function AlunoHomeScreen({
   authUser,
   perfilAluno,
   carregandoPerfil,
   agendamentosAluno,
-  agendamentosSistema,
+  reservasHorarios,
   disponibilidadesInstrutores,
   carregandoAgendamentos,
   onConfirmarAgendamento,
-  onSolicitarProvaPratica,
   onLogout,
 }) {
   const [abaAtiva, setAbaAtiva] = useState("inicio");
@@ -96,6 +125,22 @@ export default function AlunoHomeScreen({
     atual.setHours(0, 0, 0, 0);
     return atual;
   }, []);
+  const usaSaldosSeparados = perfilAluno?.modeloSaldos === "separado";
+  const permiteCarro = formacaoPermiteCategoria(
+    perfilAluno?.tipoFormacao,
+    "CARRO"
+  );
+  const permiteMoto = formacaoPermiteCategoria(
+    perfilAluno?.tipoFormacao,
+    "MOTO"
+  );
+  const saldoCarro = Number(perfilAluno?.saldoCarro || 0);
+  const saldoMoto = Number(perfilAluno?.saldoMoto || 0);
+  const aguardaLiberacaoCreditos =
+    perfilAluno?.aguardaLiberacaoCreditos === true ||
+    (usaSaldosSeparados &&
+      (!permiteCarro || saldoCarro === 0) &&
+      (!permiteMoto || saldoMoto === 0));
 
   const { proximasAulas, historicoAulas } = useMemo(() => {
     const futuras = [];
@@ -126,10 +171,11 @@ export default function AlunoHomeScreen({
     };
   }, [agendamentosAluno, hoje]);
 
-  const totalAulasNaSemanaSelecionada = useMemo(
+  const aulasCarroNaSemanaSelecionada = useMemo(
     () =>
       agendamentosAluno.filter((agendamento) => {
         if ((agendamento.status ?? "confirmado") !== "confirmado") return false;
+        if (agendamento.categoria !== "CARRO") return false;
 
         const dataAgendada = criarDataLocal(agendamento.dia);
         if (!dataAgendada) return false;
@@ -141,8 +187,13 @@ export default function AlunoHomeScreen({
 
   const proximaAula = proximasAulas[0] || null;
 
+  const instrutoresDisponiveis = instrutores.filter((instrutor) =>
+    formacaoPermiteCategoria(perfilAluno?.tipoFormacao, instrutor.categoria)
+  );
   const instrutorSelecionado =
-    instrutores.find((item) => item.nome === instrutorSelecionadoNome) || null;
+    instrutoresDisponiveis.find(
+      (item) => item.nome === instrutorSelecionadoNome
+    ) || null;
 
   const horariosBase = useMemo(
     () =>
@@ -158,31 +209,20 @@ export default function AlunoHomeScreen({
     if (!instrutorSelecionado) return [];
 
     return horariosBase.filter((horario) => {
-      const horarioOcupado = agendamentosSistema.some(
-        (agendamento) =>
-          agendamento.tipo !== "bloqueio" &&
-          agendamento.dia === diaSelecionado &&
-          agendamento.horario === horario &&
-          agendamento.instrutor === instrutorSelecionado.nome &&
-          (agendamento.status ?? "confirmado") === "confirmado"
-      );
-
-      const horarioBloqueado = agendamentosSistema.some(
-        (agendamento) =>
-          agendamento.tipo === "bloqueio" &&
-          agendamento.dia === diaSelecionado &&
-          agendamento.horario === horario &&
-          agendamento.instrutor === instrutorSelecionado.nome
+      const horarioReservado = reservasHorarios.some(
+        (reserva) =>
+          reserva.dia === diaSelecionado &&
+          reserva.horario === horario &&
+          reserva.instrutor === instrutorSelecionado.nome
       );
 
       return (
-        !horarioOcupado &&
-        !horarioBloqueado &&
+        !horarioReservado &&
         !horarioIndisponivel(dataSelecionada, horario)
       );
     });
   }, [
-    agendamentosSistema,
+    reservasHorarios,
     dataSelecionada,
     diaSelecionado,
     horariosBase,
@@ -233,7 +273,16 @@ export default function AlunoHomeScreen({
   }
 
   async function solicitarCancelamentoAula(agendamento) {
-    const mensagem = `Olá! Sou ${perfilAluno?.nome || "aluno(a)"} e gostaria de solicitar o cancelamento da minha aula do dia ${formatarDataBR(agendamento.dia)} às ${agendamento.horario}, com ${agendamento.instrutor || "instrutor não informado"}. CPF: ${perfilAluno?.cpf || "não informado"}.`;
+    const mensagem = `Olá! Sou ${perfilAluno?.nome || "aluno(a)"} e gostaria de solicitar o cancelamento da minha aula do dia ${formatarDataBR(agendamento.dia)} às ${agendamento.horario}, em ${nomeExibicaoInstrutor(agendamento.instrutor)}. CPF: ${perfilAluno?.cpf || "não informado"}.`;
+    const url = `https://wa.me/${WHATSAPP_AUTOESCOLA}?text=${encodeURIComponent(
+      mensagem
+    )}`;
+
+    await Linking.openURL(url);
+  }
+
+  async function solicitarLiberacaoDeCreditos() {
+    const mensagem = `Olá! Sou ${perfilAluno?.nome || "aluno(a)"} e finalizei meu cadastro no aplicativo. Poderiam liberar os créditos do meu pacote?\n\nCPF: ${perfilAluno?.cpf || "não informado"}\nFormação: ${perfilAluno?.tipoFormacao || "não informada"}`;
     const url = `https://wa.me/${WHATSAPP_AUTOESCOLA}?text=${encodeURIComponent(
       mensagem
     )}`;
@@ -284,9 +333,16 @@ export default function AlunoHomeScreen({
       return;
     }
 
-    const custoAulas = instrutorSelecionado.categoria === "CARRO" ? 2 : 1;
+    const custoAulas = aulasConsumidasNoAgendamento(
+      perfilAluno,
+      instrutorSelecionado.categoria
+    );
+    const saldoDisponivel = saldoDisponivelDoAluno(
+      perfilAluno,
+      instrutorSelecionado.categoria
+    );
 
-    if ((perfilAluno?.saldoAulas ?? 0) < custoAulas) {
+    if (saldoDisponivel < custoAulas) {
       Alert.alert(
         "Saldo insuficiente",
         "Seu saldo atual não cobre esse tipo de aula."
@@ -302,7 +358,10 @@ export default function AlunoHomeScreen({
       return;
     }
 
-    if (totalAulasNaSemanaSelecionada >= 3) {
+    if (
+      instrutorSelecionado.categoria === "CARRO" &&
+      aulasCarroNaSemanaSelecionada >= 3
+    ) {
       Alert.alert(
         "Limite semanal atingido",
         "Você já possui 3 dias confirmados nessa semana. Escolha outra semana para continuar."
@@ -417,18 +476,34 @@ export default function AlunoHomeScreen({
     return (
       <View style={styles.grid}>
         <InfoCard label="CPF" value={perfilAluno?.cpf || "Não informado"} />
-        <InfoCard
-          label="Saldo de aulas"
-          value={String(perfilAluno?.saldoAulas ?? 0)}
-        />
-        <InfoCard
-          label="Aulas compradas"
-          value={String(perfilAluno?.totalAulasCompradas ?? 0)}
-        />
-        <InfoCard
-          label="Aulas utilizadas"
-          value={String(perfilAluno?.aulasUtilizadas ?? 0)}
-        />
+        {usaSaldosSeparados ? (
+          <>
+            {permiteCarro ? (
+              <InfoCard label="Saldo carro" value={String(saldoCarro)} />
+            ) : null}
+            {permiteMoto ? (
+              <InfoCard label="Saldo moto" value={String(saldoMoto)} />
+            ) : null}
+            <InfoCard
+              label="Aulas utilizadas"
+              value={String(
+                (permiteCarro ? Number(perfilAluno?.aulasCarroUtilizadas || 0) : 0) +
+                  (permiteMoto ? Number(perfilAluno?.aulasMotoUtilizadas || 0) : 0)
+              )}
+            />
+          </>
+        ) : (
+          <>
+            <InfoCard
+              label="Saldo de aulas"
+              value={String(perfilAluno?.saldoAulas ?? 0)}
+            />
+            <InfoCard
+              label="Aulas utilizadas"
+              value={String(perfilAluno?.aulasUtilizadas ?? 0)}
+            />
+          </>
+        )}
       </View>
     );
   }
@@ -452,7 +527,7 @@ export default function AlunoHomeScreen({
             </Text>
           </View>
           <Text style={styles.weekRuleText}>
-            Semana selecionada: {totalAulasNaSemanaSelecionada}/3 dias já confirmados.
+            Semana selecionada: {aulasCarroNaSemanaSelecionada}/3 dias de carro já confirmados.
           </Text>
 
         <Text style={styles.subsectionTitle}>Data</Text>
@@ -494,9 +569,9 @@ export default function AlunoHomeScreen({
           </View>
         ) : null}
 
-        <Text style={styles.subsectionTitle}>Instrutor</Text>
+        <Text style={styles.subsectionTitle}>Tipo de aula</Text>
         <View style={styles.optionList}>
-          {instrutores.map((instrutor) => (
+          {instrutoresDisponiveis.map((instrutor) => (
             <Pressable
               key={instrutor.nome}
               style={[
@@ -516,7 +591,7 @@ export default function AlunoHomeScreen({
                     styles.optionTitleActive,
                 ]}
               >
-                {instrutor.nome}
+                {instrutor.rotuloExibicao || instrutor.nome}
               </Text>
               <Text
                 style={[
@@ -540,11 +615,10 @@ export default function AlunoHomeScreen({
               />
               <MiniInfoCard
                 label="Consumo"
-                value={
-                  instrutorSelecionado.categoria === "CARRO"
-                    ? "2 créditos"
-                    : "1 crédito"
-                }
+                value={`${aulasConsumidasNoAgendamento(
+                  perfilAluno,
+                  instrutorSelecionado.categoria
+                )} crédito(s)`}
               />
             </View>
 
@@ -578,9 +652,11 @@ export default function AlunoHomeScreen({
             )}
 
             <Text style={styles.bookingHint}>
-              {instrutorSelecionado.categoria === "CARRO"
-                ? "Aula de carro consome 2 créditos."
-                : "Aula de moto consome 1 crédito."}
+              {usaSaldosSeparados
+                ? "Cada aula consome 1 crédito da modalidade escolhida."
+                : instrutorSelecionado.categoria === "CARRO"
+                  ? "Aula de carro consome 2 créditos."
+                  : "Aula de moto consome 1 crédito."}
             </Text>
 
             {horarioSelecionado ? (
@@ -590,7 +666,7 @@ export default function AlunoHomeScreen({
                   {formatarDataComDiaSemana(dataSelecionada)}
                 </Text>
                 <Text style={styles.summaryLine}>
-                  {horarioSelecionado} • {instrutorSelecionado.nome}
+                  {horarioSelecionado} • {instrutorSelecionado.rotuloExibicao || instrutorSelecionado.nome}
                 </Text>
                 <Text style={styles.summaryLine}>
                   {instrutorSelecionado.categoria} • {instrutorSelecionado.veiculo}
@@ -687,7 +763,7 @@ export default function AlunoHomeScreen({
                       </View>
                       <Text style={styles.lessonMeta}>
                         {agendamento.horario} |{" "}
-                        {agendamento.instrutor || "Instrutor"}
+                        {nomeExibicaoInstrutor(agendamento.instrutor)}
                       </Text>
                       <Text style={styles.lessonMeta}>
                         {agendamento.categoria || "Categoria"} |{" "}
@@ -738,7 +814,7 @@ export default function AlunoHomeScreen({
                       </View>
                       <Text style={styles.lessonMeta}>
                         {agendamento.horario} |{" "}
-                        {agendamento.instrutor || "Instrutor"}
+                        {nomeExibicaoInstrutor(agendamento.instrutor)}
                       </Text>
                       <Text style={styles.lessonMeta}>
                         {agendamento.categoria || "Categoria"} |{" "}
@@ -760,6 +836,26 @@ export default function AlunoHomeScreen({
       <>
         {renderHero()}
         {renderSaldoCards()}
+        {aguardaLiberacaoCreditos ? (
+          <View style={styles.creditRequestCard}>
+            <Text style={styles.creditRequestTitle}>Aguardando créditos</Text>
+            <Text style={styles.creditRequestText}>
+              A autoescola ainda precisa liberar as aulas do seu pacote para você começar a agendar.
+            </Text>
+            <Pressable
+              style={styles.creditRequestButton}
+              onPress={() => {
+                solicitarLiberacaoDeCreditos().catch(() => {
+                  Alert.alert("Não foi possível abrir", "Tente novamente em instantes.");
+                });
+              }}
+            >
+              <Text style={styles.creditRequestButtonText}>
+                Solicitar liberação no WhatsApp
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>Próxima aula</Text>
           {proximaAula ? (
@@ -769,7 +865,9 @@ export default function AlunoHomeScreen({
               </Text>
               <View style={styles.list}>
                 <Bullet
-                  text={`Instrutor: ${proximaAula.instrutor || "Não informado"}`}
+                  text={`Tipo de aula: ${nomeExibicaoInstrutor(
+                    proximaAula.instrutor
+                  )}`}
                 />
                 <Bullet
                   text={`Categoria: ${proximaAula.categoria || "Não informada"}`}
@@ -828,6 +926,9 @@ export default function AlunoHomeScreen({
             <Bullet text={`CPF: ${perfilAluno?.cpf || "Não informado"}`} />
             <Bullet
               text={`Telefone: ${perfilAluno?.telefone || "Não informado"}`}
+            />
+            <Bullet
+              text={`Formação: ${perfilAluno?.tipoFormacao || "Não informada"}`}
             />
             <Bullet
               text={`Prova prática: ${statusProvaPraticaLegivel(
@@ -953,6 +1054,22 @@ function obterHorariosInstrutorPorData(instrutor, dia, disponibilidadesInstrutor
 }
 
 function traduzirErroAgendamento(mensagem = "") {
+  if (mensagem.includes("Por segurança, aguarde")) {
+    return mensagem;
+  }
+
+  if (mensagem.includes("acabou de ser reservado")) {
+    return "Esse horário acabou de ser reservado. Escolha outro.";
+  }
+
+  if (mensagem.includes("não faz parte da sua formação")) {
+    return "Esse tipo de aula não faz parte da sua formação.";
+  }
+
+  if (mensagem.includes("segunda a sexta")) {
+    return mensagem;
+  }
+
   if (mensagem.includes("uma aula confirmada nesse dia")) {
     return "Você já possui uma aula confirmada nesse dia.";
   }
@@ -1141,6 +1258,36 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 },
     elevation: 4,
+  },
+  creditRequestCard: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  creditRequestTitle: {
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  creditRequestText: {
+    color: "rgba(255,255,255,0.84)",
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  creditRequestButton: {
+    marginTop: spacing.xs,
+    minHeight: 46,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  creditRequestButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: "800",
   },
   panelTitle: {
     color: colors.text,

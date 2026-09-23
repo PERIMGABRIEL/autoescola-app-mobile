@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -24,6 +25,10 @@ export default function AuthScreen() {
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
+  const [email, setEmail] = useState("");
+  const [tipoFormacao, setTipoFormacao] = useState("");
+  const [confirmacaoSenha, setConfirmacaoSenha] = useState("");
+  const [aceitouPrivacidade, setAceitouPrivacidade] = useState(false);
   const [carregando, setCarregando] = useState(false);
 
   const titulo = useMemo(
@@ -58,10 +63,28 @@ export default function AuthScreen() {
       return false;
     }
 
+    if (modo === "cadastro" && !tipoFormacao) {
+      Alert.alert("Formação obrigatória", "Escolha o tipo de formação.");
+      return false;
+    }
+
     if (senha.trim().length < 6) {
       Alert.alert(
         "Senha muito curta",
         "Use uma senha com pelo menos 6 caracteres."
+      );
+      return false;
+    }
+
+    if (modo === "cadastro" && senha !== confirmacaoSenha) {
+      Alert.alert("Senhas diferentes", "Confira a confirmação de senha.");
+      return false;
+    }
+
+    if (modo === "cadastro" && !aceitouPrivacidade) {
+      Alert.alert(
+        "Política de Privacidade",
+        "É necessário aceitar a Política de Privacidade para criar a conta."
       );
       return false;
     }
@@ -82,6 +105,8 @@ export default function AuthScreen() {
           nome: nome.trim(),
           cpf,
           telefone: telefone.trim(),
+          email,
+          tipoFormacao,
           senha,
         });
       }
@@ -178,6 +203,46 @@ export default function AuthScreen() {
             />
           ) : null}
 
+          {modo === "cadastro" ? (
+            <Field
+              label="E-mail para contato (opcional)"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Digite seu e-mail"
+              keyboardType="email-address"
+            />
+          ) : null}
+
+          {modo === "cadastro" ? (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Tipo de formação</Text>
+              <View style={styles.trainingOptions}>
+                {["Carro e moto", "Apenas carro", "Apenas moto"].map(
+                  (opcao) => (
+                    <Pressable
+                      key={opcao}
+                      style={[
+                        styles.trainingOption,
+                        tipoFormacao === opcao && styles.trainingOptionActive,
+                      ]}
+                      onPress={() => setTipoFormacao(opcao)}
+                    >
+                      <Text
+                        style={[
+                          styles.trainingOptionText,
+                          tipoFormacao === opcao &&
+                            styles.trainingOptionTextActive,
+                        ]}
+                      >
+                        {opcao}
+                      </Text>
+                    </Pressable>
+                  )
+                )}
+              </View>
+            </View>
+          ) : null}
+
           <Field
             label="Senha"
             value={senha}
@@ -185,6 +250,48 @@ export default function AuthScreen() {
             placeholder="Sua senha"
             secureTextEntry
           />
+
+          {modo === "cadastro" ? (
+            <Field
+              label="Confirmar senha"
+              value={confirmacaoSenha}
+              onChangeText={setConfirmacaoSenha}
+              placeholder="Digite a senha novamente"
+              secureTextEntry
+            />
+          ) : null}
+
+          {modo === "cadastro" ? (
+            <View style={styles.privacyRow}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: aceitouPrivacidade }}
+                style={[
+                  styles.checkbox,
+                  aceitouPrivacidade && styles.checkboxChecked,
+                ]}
+                onPress={() => setAceitouPrivacidade((atual) => !atual)}
+              >
+                {aceitouPrivacidade ? (
+                  <Text style={styles.checkboxIcon}>✓</Text>
+                ) : null}
+              </Pressable>
+              <Text style={styles.privacyText}>
+                Li e concordo com a{" "}
+                <Text
+                  style={styles.privacyLink}
+                  onPress={() =>
+                    Linking.openURL(
+                      "https://www.autoescolajardimbotanico.com.br/privacidade"
+                    )
+                  }
+                >
+                  Política de Privacidade
+                </Text>
+                .
+              </Text>
+            </View>
+          ) : null}
 
           <Pressable
             style={[styles.button, carregando && styles.buttonDisabled]}
@@ -369,6 +476,61 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     color: colors.text,
     fontSize: 16,
+  },
+  trainingOptions: {
+    gap: spacing.sm,
+  },
+  trainingOption: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.white,
+  },
+  trainingOptionActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  trainingOptionText: {
+    color: colors.text,
+    fontWeight: "700",
+  },
+  trainingOptionTextActive: {
+    color: colors.white,
+  },
+  privacyRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.primary,
+  },
+  checkboxIcon: {
+    color: colors.white,
+    fontWeight: "800",
+  },
+  privacyText: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  privacyLink: {
+    color: colors.primary,
+    fontWeight: "800",
+    textDecorationLine: "underline",
   },
   button: {
     backgroundColor: colors.primary,
