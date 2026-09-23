@@ -2,7 +2,7 @@
   "expo": {
     "name": "Autoescola Jardim Botânico",
     "slug": "autoescola-jardim-botanico",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/simbolo-jardim-botanico.png",
     "userInterfaceStyle": "light",
